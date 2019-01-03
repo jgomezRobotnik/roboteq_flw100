@@ -1,0 +1,4 @@
+<launch>
+    <!-- Lanza el nodo que publica los datos recogidos-->
+    <node pkg="roboteq_flw100" type="roboteq_flw100.py" name="raw_flw100" output="screen"/>
+</launch>

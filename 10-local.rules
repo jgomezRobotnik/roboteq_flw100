@@ -1,0 +1,1 @@
+ATTRS{idVendor}=="0483", ATTRS{idProduct}=="5740", SYMLINK+="RoboteQ-FLW100", MODE="0666"
