@@ -122,7 +122,7 @@ def main():
         getted_calidad = int(getted_calidad[9:])
         
         # Imprimimos los valores
-        print 'X:     %-10s Y:     %-10s\n' % (getted_x,getted_y)
+        print 'X:     %-10s Y:     %-10s\n' % (x,y)
         print 'Vel X: %-10s Vel Y: %-10s\n' % (getted_vx,getted_vy)
         print 'Calidad: '+str(getted_calidad)+' (debería ser > 1800)'
         print '-----------------------------------'
