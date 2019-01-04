@@ -10,6 +10,7 @@ import rospy
 import serial
 import time
 import tf
+import re
 from nav_msgs.msg import Odometry
 from geometry_msgs.msg import PoseWithCovariance, Pose, Point, Quaternion
 from geometry_msgs.msg import TwistWithCovariance, Twist, Vector3
@@ -26,6 +27,15 @@ rate = rospy.Rate(5) # 50hz
 odom_pub = rospy.Publisher('flw100/odom', Odometry, queue_size = 10)
 odom_broadcaster = tf.TransformBroadcaster()
 
+# Initial positions (depending on odom)
+x = 0.26 # (In front of the RB1)
+y = 0.0
+# Angle on the z-axis (depending on odom)
+th = 0.0
+# Angle of all axis (quaternion)
+getted_odom_quat = [0,0,0,1] # From sensor
+odom_quat = [0,0,0,1] # From robot IMU
+
 # Methods
 
 def getSerialData():
@@ -41,11 +51,21 @@ def is_digit(n):
     except ValueError:
         return False
 
+def callback_orientation(msg):
+    global odom_quat, th
+    # Getting orientation from robot
+    odom_quat = [msg.pose.pose.orientation.x,
+                 msg.pose.pose.orientation.y,
+                 msg.pose.pose.orientation.z,
+                 msg.pose.pose.orientation.w]
+    euler = tf.transformations.euler_from_quaternion(odom_quat)
+    th = euler[2]
+
 def main():
-    
-    x = 0.0 # Posiciones iniciales (respecto a odom)
-    y = 0.0
-    th = 0.0 # Ángulo en el eje Z (respecto a odom)
+
+    rospy.Subscriber('/rb1_base_a/robotnik_base_control/odom', Odometry, callback_orientation)
+
+    global x, y, th, getted_odom_quat, odom_quat
 
     current_time = rospy.Time.now()
     last_time = rospy.Time.now()
@@ -72,14 +92,20 @@ def main():
             getted_vy = getSerialData()
         getted_vy = int(getted_vy[11:]) / 10000.0 # In m/s
 
-        # Reading angular velocity in z
-
-        ser.write('?RMG 3\r\n')
-        getted_vth = getSerialData()
-        while not is_digit(getted_vth[11:]):
-            ser.write('?RMG 3\r\n')
-            getted_vth = getSerialData()
-        getted_vth = int(getted_vth[11:])
+        # Reading angular velocity (AHRS)
+        
+        ser.write('?QO uu 0\r\n')
+        getted_gyro = getSerialData()
+        getted_gyro = getted_gyro.replace('=',':').split(":")
+        if ( len(getted_gyro) == 5 and
+             is_digit(getted_gyro[1]) and
+             is_digit(getted_gyro[2]) and
+             is_digit(getted_gyro[3]) and
+             is_digit(getted_gyro[4])):
+            getted_odom_quat[0] = int(getted_gyro[1]) / 1000.0
+            getted_odom_quat[1] = int(getted_gyro[2]) / 1000.0
+            getted_odom_quat[2] = int(getted_gyro[3]) / 1000.0
+            getted_odom_quat[3] = int(getted_gyro[4]) / 1000.0
 
         # Just for debugging (commented):
 
@@ -106,14 +132,12 @@ def main():
         dt = (current_time - last_time).to_sec()
         delta_x = (getted_vx * cos(th) - getted_vy * sin(th)) * dt
         delta_y = (getted_vx * sin(th) + getted_vy * cos(th)) * dt
-        delta_th = getted_vth * dt
 
         x += delta_x
         y += delta_y
-        th += delta_th
 
         # since all odometry is 6DOF we'll need a quaternion created from yaw
-        odom_quat = tf.transformations.quaternion_from_euler(0, 0, th)
+        #odom_quat = tf.transformations.quaternion_from_euler(0, 0, th)
 
         # first, we'll publish the transform over tf
         odom_broadcaster.sendTransform(
@@ -130,7 +154,7 @@ def main():
         # set the position
         data.pose.pose.position = Point(x, y, 0)
         
-        # set the orientation
+        # set the orientation (if we want, we can use getted_odom_quat)
         data.pose.pose.orientation.x = odom_quat[0]
         data.pose.pose.orientation.y = odom_quat[1]
         data.pose.pose.orientation.z = odom_quat[2]
